@@ -18,10 +18,10 @@ LiquidCrystal lcd(9, 10, A3, A2, A1, A0);
 int redPin = 6;
 int greenPin = 5;
 int bluePin = 3;
-int buttonPin = 8;
+int buzzerPin = 8;
 
 // Input pins
-int buzzerPin = 2;
+int buttonPin = 2;
 int faultPin = 7;
 
 // System states
@@ -55,6 +55,14 @@ void setup() {
 }
 
 void loop() {
+  handleButton();
+  checkFault();
+  updateLCD();
+  updateOutputs();
+}
+
+// Handles button input and state transitions
+void handleButton() {
   // Read current button state
   int buttonReading = digitalRead(buttonPin);
 
@@ -75,11 +83,20 @@ void loop() {
     }
   }
 
-  // Fault trigger and can only while system is running
+  // Store button state for next loop iteration
+  lastButtonReading = buttonReading;
+}
+
+// Checks for fault conditions during operation
+void checkFault() {
+  // Fault can only trigger while system is running
   if (currentState == RUNNING && digitalRead(faultPin) == LOW) {
     currentState = FAULT;
   }
+}
 
+// Updates the LCD display when the state changes
+void updateLCD() {
   // Only update LCD when state changes to prevent flickering
   if (currentState != lastState) {
     lcd.clear();
@@ -106,7 +123,10 @@ void loop() {
     // Save current state for future comparison
     lastState = currentState;
   }
+}
 
+// Controls LED and buzzer outputs based on system state
+void updateOutputs() {
   // Output control logic for each state
   if (currentState == IDLE) {
     // System inactive
@@ -128,11 +148,7 @@ void loop() {
     setColor(255, 165, 0); // Yellow-Orange
     digitalWrite(buzzerPin, LOW);
   }
-
-  // Store button state for next loop iteration
-  lastButtonReading = buttonReading;
 }
-
 
 // Controls RGB LED color using PWM
 void setColor(int redValue, int greenValue, int blueValue) {
