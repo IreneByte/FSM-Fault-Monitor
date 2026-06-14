@@ -1,5 +1,5 @@
 /*
-  v2 - FSM-Based Monitoring System
+  v3 - FSM-Based Monitoring System
 
   Features:
   - Push button state control
@@ -11,71 +11,63 @@
 
 #include <LiquidCrystal.h>
 #include <DHT.h>
-#include "SR04.h"
+#include <NewPing.h>
 
-#define DHTTYPE DHT11
+#define DHTTYPE DHT22
+#define MAX_DISTANCE 200
 
+//* PIN CONFIGURATIONS
 // LCD pin configuration
-LiquidCrystal lcd(9, 10, A3, A2, A1, A0);
+LiquidCrystal lcd(13, 12, 11, 10, 9, 8);
 
-// Ultrasonic sensor pins
-int trigPin = A5;
-int echoPin = 11;
+const int trigPin = A3;
+const int echoPin = A2;
+const int redPin = 3;
+const int greenPin = 5;
+const int bluePin = 6;
+const int buzzerPin = 2;
+const int buttonPin = A4;
+const int faultPin = A5;
+const int photoresPin = A0;
+const int tempHumidPin = 4;
 
+//* COMPONENT CONFIGURATIONS
 // Ultrasonic pin configuration
-SR04 sensor = SR04(echoPin, trigPin);
+NewPing sensor(trigPin, echoPin, MAX_DISTANCE);
 long distance;
 unsigned long objectDetectedTime = 0;
 
-// Photoresistor data pin
-int photoresPin = A4;
-
-// Temperature and humidity sensor pin
-int tempHumidPin = 4;
+// Temperature and humidity sensor
 DHT dht(tempHumidPin, DHTTYPE);
 float temperature;
 
 // Sensor thresholds
-int distanceThreshold = 10;
-int lightThreshold = 200;
-float tempThreshold = 30.0;
-
-// Warning flags
-bool warningTemp = false;
-bool warningLight = false;
-
-// Output pins
-int redPin = 6;
-int greenPin = 5;
-int bluePin = 3;
-int buzzerPin = 8;
-
-// Input pins
-int buttonPin = 2;
-int faultPin = 7;
+const int distanceThreshold = 10;
+const int lightThreshold = 200;
+const float tempThreshold = 30.0;
 
 // System states
 enum State {
   IDLE,
   RUNNING, 
-  FAULT,
-  RESET_REQUIRED
+  FAULT, // Buzzer on, light red
+  RESET_REQUIRED // Problem fixed, waiting to restart
 };
 
 // Tracks current and previous system states
-State currentState = IDLE;
+State currentState = RUNNING;
 State lastState = RESET_REQUIRED;
 
-// Fault and warning statuses
-const char* currentStatus = "ALL NORMAL";
-const char* lastStatus = "";
+// Fault statuses
+const char* currentFault = "";
+const char* lastFault = "INIT";
 
 // Tracks previous button state for edge detection
 int lastButtonReading = HIGH;
 
-// Debounce times
+// Debounce time
 unsigned long lastDebounceTime = 0;
-unsigned long debounceDelay = 50;
+const unsigned long debounceDelay = 50;
 
 void setup() {
   // Configure input pins using internal pull-up resistors
@@ -106,7 +98,7 @@ void loop() {
 void readSensors() {
   if (currentState == RUNNING) {
     // Ultrasonic
-    distance = sensor.Distance();
+    distance = sensor.ping_cm();
 
     // Photoresistor
     int lightLevel = analogRead(photoresPin);
@@ -114,12 +106,7 @@ void readSensors() {
     // Temperature
     temperature = dht.readTemperature();
 
-    // Serial monitoring
-    Serial.print("Temp: ");
-    Serial.println(temperature);
-
-    Serial.print("Distance: ");
-    Serial.println(distance);
+    if (isnan(temperature)) return;
 
     // Fault Detection
     // F01 - Object too close
@@ -128,31 +115,27 @@ void readSensors() {
         objectDetectedTime = millis();
       }
       if (millis() - objectDetectedTime > 2000) {
+        currentFault = "F01 OBJ JAM";
         currentState = FAULT;
       }
     } else {
       objectDetectedTime = 0;
     }
 
-    // Warning Detection
-    // W01 - High temperature
+    // F02 - High temperature
     if (temperature > tempThreshold)
     {
-      warningTemp = true;
-    } else {
-      warningTemp = false;
-    }
+      currentFault = "F02 HIGH TEMP";
+      currentState = FAULT;
+    } 
 
-    // W02 - Blocked light sensor
+    // F03 - Blocked light sensor
     if (lightLevel < lightThreshold)
     {
-      warningLight = true;
-    } else {
-      warningLight = false;
+      currentFault = "F03 LOW LIGHT";
+      currentState = FAULT;
     }
   } else {
-    warningTemp = false;
-    warningLight = false;
     objectDetectedTime = 0;
   }
 }
@@ -161,40 +144,54 @@ void readSensors() {
 void handleButton() {
   // Read current button state
   int currentButtonReading = digitalRead(buttonPin);
+  static bool hasTriggered = false;
 
   // Reset debounce timer if reading changes
   if (currentButtonReading != lastButtonReading) {
     lastDebounceTime = millis();
+    lastButtonReading = currentButtonReading;
   }
 
   // Only accept stable button presses
   if ((millis() - lastDebounceTime) > debounceDelay) {
     // Detects a new button press
-    if (currentButtonReading == LOW && lastButtonReading == HIGH) {
+    if (currentButtonReading == LOW && !hasTriggered) {
       // State transition logic
-      if (currentState == IDLE) {
-        currentState = RUNNING;
-      } 
-      else if (currentState == RUNNING) {
-        currentState = IDLE;
+      switch (currentState) {
+        case IDLE:
+          currentState = RUNNING;
+          break;
+
+        case RUNNING:
+          currentState = IDLE;
+          break;
+
+        case FAULT:
+          currentState = RESET_REQUIRED;
+          break;
+
+        case RESET_REQUIRED:
+          currentState = RUNNING;
+          currentFault = "";
+          lastFault = "";
+          break;
+
+        default:
+          break;
       }
-      else if (currentState == FAULT) {
-        currentState = RESET_REQUIRED;
-      }
-      else if (currentState == RESET_REQUIRED) {
-        currentState = IDLE;
-      }
+      hasTriggered = true;
+    }
+    if (currentButtonReading == HIGH) {
+      hasTriggered = false;
     }
   }
-
-  // Store button state for next loop iteration
-  lastButtonReading = currentButtonReading;
 }
 
 // Checks for fault conditions during operation
 void checkFault() {
   // Fault can only trigger while system is running
   if (currentState == RUNNING && digitalRead(faultPin) == LOW) {
+    currentFault = "F0 TEST FAULT";
     currentState = FAULT;
   }
 }
@@ -208,79 +205,69 @@ void updateLCD() {
     lcd.setCursor(0,0);
 
     // Display current system state on LCD
-    if (currentState == IDLE)
-    {
-      lcd.print("SYS: IDLE");
-    }
-    else if (currentState == RUNNING)
-    {
-      lcd.print("SYS: RUNNING");
-    }
-    else if (currentState == FAULT)
-    {
-      lcd.print("SYS: FAULT!");
-    }
-    else if (currentState == RESET_REQUIRED)
-    {
-      lcd.print("SYS: RESET!");
-    }
+    switch (currentState) {
+      case IDLE:
+        lcd.print("SYS: IDLE");
+        break;
+      
+      case RUNNING:
+        lcd.print("SYS: RUNNING");
+        break;
 
+      case FAULT:
+        lcd.print("SYS: FAULT!");
+        break;
+
+      case RESET_REQUIRED:
+        lcd.print("SYS: RESET");
+        break;
+
+      default:
+        break;
+    }
     // Save current state for future comparison
     lastState = currentState;
   }
-
-  if (currentState == FAULT)
-  {
-    currentStatus = "F01 OBJECT JAM";
-  }
-  else if (warningTemp)
-  {
-    currentStatus = "W01 HIGH TEMP";
-  }
-  else if (warningLight)
-  {
-    currentStatus = "W02 LOW LIGHT";
-  }
-  else {
-    currentStatus = "ALL NORMAL";
-  }
   
-  if (currentStatus != lastStatus) {
-    lcd.setCursor(0,1);
-    lcd.print(currentStatus);
+  if (strcmp(currentFault, lastFault) != 0) {
+    lcd.setCursor(0, 1);
+    lcd.print(currentFault);
 
-    lastStatus = currentStatus;
+    lastFault = currentFault;
   }
 }
 
 // Controls LED and buzzer outputs based on system state
 void updateOutputs() {
   // Output control logic for each state
-  if (currentState == IDLE) {
-    // System inactive
-    setColor(0, 0, 0); // Off
-    digitalWrite(buzzerPin, LOW);
-  } 
-  else if (currentState == RUNNING) {
-    // Normal operation
-    if (warningTemp || warningLight) {
-      setColor(255, 255, 0); // Yellow warning
+  switch (currentState) {
+    case IDLE:
+      // System inactive
+      setColor(0, 0, 255); // Blue
+      digitalWrite(buzzerPin, LOW);
+      break;
+    
+    case RUNNING:
+      // Normal operation
+      setColor(0, 255, 0); // Green
+      digitalWrite(buzzerPin, LOW);  
+      break; 
+
+    case FAULT:
+      // Fault detected
+      setColor(255, 0, 0); // Red
+      digitalWrite(buzzerPin, HIGH);  
+      break;
+
+    case RESET_REQUIRED:
+      // Waiting for manual reset
+      setColor(255, 70, 0); // Orange
+      digitalWrite(buzzerPin, LOW);
+      break;
+    
+    default:
+      break;
     }
-    else {
-      setColor(0, 255, 0); // Green normal
-    }
-    digitalWrite(buzzerPin, LOW);    
-  }
-  else if (currentState == FAULT) {
-    // Fault detected
-    setColor(255, 0, 0); // Red
-    digitalWrite(buzzerPin, HIGH);    
-  }
-  else if (currentState == RESET_REQUIRED) {
-    // Waiting for manual reset
-    setColor(255, 70, 0); // Orange
-    digitalWrite(buzzerPin, LOW);
-  }
 }
 
 // Controls RGB LED color using PWM
