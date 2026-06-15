@@ -1,12 +1,14 @@
 import serial
 import csv
+from datetime import datetime
 
 with serial.Serial() as ser:
     ser.baudrate = 9600
-    ser.port = ''
+    ser.port = 'COM3'
     ser.open()
 
-    filename = 'state_log.csv'
+    now = datetime.now()
+    filename = f"state_log_{now.strftime('%Y%m%d_%H%M%S')}.csv"
 
     with open(filename, 'w') as csvfile:
         csvwriter = csv.writer(csvfile)
@@ -27,5 +29,3 @@ with serial.Serial() as ser:
             print("Arduino disconnected.")
         except Exception as e:
             print(f"Unexpected error: {e}")
-
-
