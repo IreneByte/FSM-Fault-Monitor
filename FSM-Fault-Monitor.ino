@@ -1,5 +1,5 @@
 /*
-  v3 - FSM-Based Monitoring System
+  v4 - FSM-Based Monitoring System
 
   Features:
   - Push button state control
@@ -92,6 +92,7 @@ void setup() {
 void loop() {
   handleButton();
   readSensors();
+  detectFaults();
   testFault();
   updateLCD();
   updateOutputs();
@@ -140,7 +141,14 @@ void readSensors() {
     temperature = dht.readTemperature();
     if (isnan(temperature)) return;
 
-    // Fault Detection
+  } else {
+    objectDetectedTime = 0;
+  }
+}
+
+// Fault Detection
+void detectFaults() {
+  if (currentState == RUNNING) {
     // F01 - Object too close
     if (distance < distanceThreshold) {
       if (objectDetectedTime == 0) {
@@ -239,23 +247,23 @@ void updateLCD() {
     // Display current system state on LCD
     switch (currentState) {
       case IDLE:
-        lcd.print("SYS: IDLE");
-        printRunTime("IDLE");
+        lcd.print(F("SYS: IDLE"));
+        logEvent("IDLE");
         break;
       
       case RUNNING:
-        lcd.print("SYS: RUNNING");
-        printRunTime("RUNNING");
+        lcd.print(F("SYS: RUNNING"));
+        logEvent("RUNNING");
         break;
 
       case FAULT:
-        lcd.print("SYS: FAULT!");
-        printRunTime("FAULT");
+        lcd.print(F("SYS: FAULT!"));
+        logEvent("FAULT");
         break;
 
       case RESET_REQUIRED:
-        lcd.print("SYS: RESET");
-        printRunTime("RESET REQUIRED");
+        lcd.print(F("SYS: RESET"));
+        logEvent("RESET REQUIRED");
         break;
 
       default:
@@ -273,12 +281,12 @@ void updateLCD() {
   }
 }
 
-void printRunTime(const char* state) {
+void logEvent(const char* state) {
   unsigned long runTime = millis();
 
-  Serial.print("[");
+  Serial.print(F("["));
   Serial.print(runTime);
-  Serial.print("] STATE: ");
+  Serial.print(F("] STATE: "));
   Serial.println(state);
 
 }
