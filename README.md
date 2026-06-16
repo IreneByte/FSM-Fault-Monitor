@@ -7,7 +7,8 @@ Sensor fault detection system built on Arduino. Monitors distance, temperature, 
 ![Schematic](https://img.shields.io/badge/Schematic-KiCad-blue?style=flat-square&logo=KiCad)
 ![Status](https://img.shields.io/badge/Status-Complete-success?style=flat-square)
 
-## Demo
+## Demo [![YouTube](https://img.shields.io/badge/See%20the%20demo-red?style=flat-square&logo=YouTube)](https://www.youtube.com/watch?v=zTN1_Ybi4fk)
+
 
 ## Overview
 ### What It Does
