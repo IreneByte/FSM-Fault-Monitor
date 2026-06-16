@@ -10,10 +10,11 @@ with serial.Serial() as ser:
     now = datetime.now()
     filename = f"state_log_{now.strftime('%Y%m%d_%H%M%S')}.csv"
 
-    with open(filename, 'w') as csvfile:
+    with open(filename, 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
 
         csvwriter.writerow(['timestamp', 'event'])
+        csvfile.flush()
 
         try:
             while True:
@@ -21,8 +22,10 @@ with serial.Serial() as ser:
                 if line:
                     data = line.split('] ')
                     data[0] = data[0].replace('[', '')
+                    data[1] = data[1].replace('STATE: ', '')
                     print(line)
                     csvwriter.writerow(data)
+                    csvfile.flush()
         except KeyboardInterrupt:
             print("Logging stopped.")
         except serial.SerialException:
