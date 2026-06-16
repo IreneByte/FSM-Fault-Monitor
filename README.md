@@ -45,6 +45,39 @@ There is no way to transition from `IDLE` or `RESET_REQUIRED` directly to `FAULT
 </div>
 
 ## Hardware
+### Component List
+| Component | Part |
+|-----------|------|
+| Microcontroller | Arduino Uno R3 |
+| Display | LCD1602 (16x2) |
+| Temperature & Humidity Sensor | DHT22 |
+| Ultrasonic Distance Sensor | HC-SR04 |
+| Light Sensor | Photoresistor (LDR) |
+| LED | RGB LED (Common Cathode) |
+| Buzzer | Active Buzzer |
+| Input | Push Button x2 |
+| Resistors | 220Ω (RGB LED) x3, 1kΩ (LDR) |
+
+### Schematic Diagram
+![Schematic Diagram](https://github.com/IreneByte/FSM-Fault-Monitor/blob/main/src/images/schematic_diagram.png)
+
+### Wiring Diagram
+![Wiring Diagram](https://github.com/IreneByte/FSM-Fault-Monitor/blob/main/src/images/wiring_diagram.png)
+
+### Pin Mapping
+| Pin | Component | Role |
+|-----|-----------|------|
+| 2 | Buzzer | Output |
+| 3 | RGB LED (Red) | PWM Output |
+| 4 | DHT22 | Data |
+| 5 | RGB LED (Green) | PWM Output |
+| 6 | RGB LED (Blue) | PWM Output |
+| 8-13 | LCD1602 | Data/Control |
+| A0 | Photoresistor | Analog Input |
+| A2 | HC-SR04 (Echo) | Input |
+| A3 | HC-SR04 (Trig) | Output |
+| A4 | Push Button | Input |
+| A5 | Fault Test Button | Input |
 
 ## Fault Code Reference
 Code | Source | Description | Trigger Condition
@@ -55,11 +88,60 @@ F02 | DHT22 | High temperature | Temperature > 30°C
 F03 | Photoresistor (LDR) | Blocked light sensor | Light level < 200 (ADC, 0-1023)
 
 ## Getting Started
+### Prerequisites
+**Arduino IDE**
+- [LiquidCrystal](https://www.arduino.cc/reference/en/libraries/liquidcrystal/)
+- [DHT sensor library](https://github.com/adafruit/DHT-sensor-library)
+- [NewPing](https://bitbucket.org/teckel12/arduino-new-ping/wiki/Home)
 
-## Serial Log Format
+**Python**
+- Python 3.x
+- pyserial
+- csv (built-in)
+- datetime (built-in)
+
+Install pyserial:
+```
+python -m pip install pyserial
+```
+
+### Wiring
+Refer to the wiring diagram in `src/diagram/`.
+
+### Uploading
+1. Open `FSM-Fault-Monitor.ino` in Arduino IDE
+2. Select board: Arduino Uno
+3. Select the correct COM port
+4. Click Upload
+
+### Running the Python Logger
+Ensure the Arduino is connected on COM3 at 9600 baud, then `serial_logger.py` will run automatically. Events are logged over serial in the following format: [millis] STATE: state_name
+
+Example output:
+[6055] STATE: RUNNING
+[14376] STATE: IDLE
+[19904] STATE: RUNNING
+[20753] STATE: FAULT
+[23636] STATE: RESET REQUIRED
+
+Logs are saved automatically to a CSV file in the main directory. 
 
 ## Design Decisions
+### Why `millis()` over `delay()`
+`delay()` blocks the entire program for its duration. Using `millis()` keeps the main loop running continuously, which is necessary for real-time sensor reading, debouncing, and tracking system runtime.
+
+### Why NewPing over SR04 library
+NewPing is the only HC-SR04 library supported in Wokwi. In addition, it offers a cleaner API with built-in timeout handling compared to manual pulse timing with the basic SR04 library.
+
+### SR04 Self-Test Limitation
+The HC-SR04 is not included in the startup self-test. `ping_cm()` returns 0 both when the sensor is out of range and when it is disconnected, making the two conditions indistinguishable without additional hardware.
 
 ## Known Limitations
-
-## Test Plan
+- Sensor readings are not instantaneous and vary under real-world conditions
+- The 30°C temperature threshold makes F02 difficult to trigger without an external heat source
+- HC-SR04 cannot be verified during startup self-test (see Design Decisions)
+- Wokwi simulation does not support all physical components exactly:
+  - DHT11 (physical) replaced with DHT22 in simulation
+  - LDR part differs slightly from physical photoresistor
+- Python logger has manual port configuration (hardcoded COM3, 9600 baud)
+- Wokwi web version does not support Python serial integration, so VS Code with Wokwi extension must be used for full simulation
